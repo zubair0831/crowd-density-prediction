@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Crowd Monitoring System</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #1a1a2e;
+            color: white;
+            padding: 20px;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .header h1 {
+            font-size: 36px;
+            margin: 0 0 10px 0;
+        }
+        .alert {
+            background: red;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 10px;
+            display: none;
+            animation: pulse 1s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.8; }
+        }
+        .alert.show {
+            display: block;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 20px;
+        }
+        .upload-box {
+            background: #2a2a3e;
+            padding: 50px;
+            border-radius: 10px;
+            text-align: center;
+            border: 3px dashed #555;
+            transition: border-color 0.3s;
+        }
+        .upload-box:hover {
+            border-color: #0080ff;
+        }
+        .video-area {
+            background: #2a2a3e;
+            padding: 20px;
+            border-radius: 10px;
+            display: none;
+        }
+        .video-area.show {
+            display: block;
+        }
+        .video-wrapper {
+            position: relative;
+            background: black;
+            border-radius: 8px;
+            width: 100%;
+            overflow: hidden;
+        }
+        video {
+            width: 100%;
+            height: auto;
+            display: block;
+            border-radius: 8px;
+        }
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        button {
+            background: #0080ff;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            font-size: 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            margin: 10px 5px;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background: #0066cc;
+        }
+        button:disabled {
+            background: #555;
+            cursor: not-allowed;
+        }
+        .stats {
+            background: #2a2a3e;
+            padding: 20px;
+            border-radius: 10px;
+        }
+        .stat-box {
+            background: #3a3a4e;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 8px;
+        }
+        .stat-label {
+            color: #aaa;
+            font-size: 14px;
+        }
+        .stat-value {
+            font-size: 32px;
+            font-weight: bold;
+            margin-top: 5px;
+        }
+        .current { color: #0080ff; }
+        .max { color: #ff8000; }
+        .avg { color: #00ff80; }
+        input[type="number"], input[type="range"] {
+            width: 100%;
+            padding: 10px;
+            background: #3a3a4e;
+            border: 1px solid #555;
+            color: white;
+            border-radius: 5px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+        input[type="range"] {
+            padding: 0;
+            height: 8px;
+        }
+        .slider-value {
+            color: #0080ff;
+            font-weight: bold;
+            font-size: 18px;
+            margin-top: 5px;
+        }
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .progress {
+            background: #3a3a4e;
+            padding: 10px;
+            border-radius: 5px;
+            margin-top: 10px;
+            display: none;
+        }
+        .progress.show {
+            display: block;
+        }
+        .progress-bar {
+            background: #555;
+            height: 20px;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-top: 5px;
+        }
+        .progress-fill {
+            background: #0080ff;
+            height: 100%;
+            width: 0%;
+            transition: width 0.3s;
+        }
+        .download-box {
+            background: #2a2a3e;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            display: none;
+        }
+        .download-box.show {
+            display: block;
+        }
+        .log {
+            background: #1a1a2e;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+            color: #0f0;
+        }
+        .setting-group {
+            margin-bottom: 20px;
+        }
+        .setting-label {
+            color: #aaa;
+            font-size: 14px;
+            margin-bottom: 5px;
+            display: block;
+        }
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .checkbox-group input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+        }
+        .checkbox-group label {
+            color: white;
+            cursor: pointer;
+        }
+        .warning {
+            background: #ff8000;
+            padding: 10px;
+            border-radius: 5px;
+            margin-top: 10px;
+            font-size: 12px;
+        }
+        @media (max-width: 768px) {
+            .container {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🎥 AI Crowd Monitoring System</h1>
+        <p>Real-time stampede prevention with P2PNet</p>
+    </div>
+
+    <div id="alert" class="alert">
+        <h2>⚠️ ALERT: Threshold Exceeded!</h2>
+        <p id="alertMsg"></p>
+        <button onclick="hideAlert()">Dismiss</button>
+    </div>
+
+    <div class="container">
+        <div>
+            <div id="uploadBox" class="upload-box">
+                <h2>📤 Upload Video</h2>
+                <p>Select video file for crowd analysis</p>
+                <input type="file" id="fileInput" accept="video/*" style="display:none">
+                <button onclick="selectFile()">Choose Video</button>
+            </div>
+
+            <div id="videoArea" class="video-area">
+                <div class="video-wrapper" id="videoWrapper">
+                    <video id="video"></video>
+                    <canvas id="canvas"></canvas>
+                </div>
+                <div class="progress" id="progress">
+                    <div>Processing: <span id="progressText">0%</span></div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                    <div class="log" id="log"></div>
+                </div>
+                <div>
+                    <button onclick="playPause()" id="playBtn">▶ Play</button>
+                    <button onclick="processVideo()" id="processBtn">🚀 Process Video</button>
+                    <button onclick="reset()">🔄 Reset</button>
+                </div>
+            </div>
+
+            <div id="downloadBox" class="download-box">
+                <h2>✅ Processing Complete!</h2>
+                <p>Analysis finished successfully</p>
+                <button onclick="viewResults()">📊 View Results</button>
+                <button onclick="reset()">Start New Analysis</button>
+            </div>
+        </div>
+
+        <div class="sidebar">
+            <div class="stats">
+                <h3>📊 Live Statistics</h3>
+                <div class="stat-box">
+                    <div class="stat-label">Current Count</div>
+                    <div class="stat-value current" id="current">0</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">Maximum</div>
+                    <div class="stat-value max" id="max">0</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">Average</div>
+                    <div class="stat-value avg" id="avg">0</div>
+                </div>
+            </div>
+
+            <div class="stats">
+                <h3>⚙️ Detection Settings</h3>
+                
+                <div class="setting-group">
+                    <label class="setting-label">Detection Confidence Threshold</label>
+                    <input type="range" id="confidenceSlider" min="0.1" max="0.9" step="0.05" value="0.5" oninput="updateConfidence()">
+                    <div class="slider-value" id="confidenceValue">0.50</div>
+                    <small style="color: #888;">Lower = More detections (may include false positives)</small>
+                </div>
+
+                <div class="setting-group">
+                    <label class="setting-label">Alert Threshold (people)</label>
+                    <input type="number" id="threshold" value="50" min="1">
+                </div>
+
+                <div class="setting-group">
+                    <label class="setting-label">Processing FPS (1-30)</label>
+                    <input type="number" id="fpsInput" value="1" min="1" max="30">
+                    <small style="color: #888;">Higher FPS = More accurate but slower</small>
+                </div>
+
+                <div class="setting-group">
+                    <label class="setting-label">Visualization Options</label>
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="showDots" checked onchange="redrawCanvas()">
+                        <label for="showDots">Show Detection Dots</label>
+                    </div>
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="showHeatmap" onchange="redrawCanvas()">
+                        <label for="showHeatmap">Show Heatmap</label>
+                    </div>
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="showCount" checked onchange="redrawCanvas()">
+                        <label for="showCount">Show Count Overlay</label>
+                    </div>
+                </div>
+
+                <div class="warning">
+                    ⚠️ Note: P2PNet accuracy varies by video quality, lighting, and crowd density. Adjust confidence threshold for better results.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    const API = 'http://localhost:8000';
+    let file = null;
+    let ws = null;
+    let sessionId = null;
+    let frameData = [];
+    let playing = false;
+    let processingComplete = false;
+    let currentConfidence = 0.5;
+
+    console.log('🔍 Testing backend connection...');
+    fetch(API + '/')
+        .then(r => r.json())
+        .then(d => {
+            console.log('✅ Backend connected:', d);
+            addLog('Backend connected: ' + d.model + ' on ' + d.device);
+        })
+        .catch(e => {
+            console.error('❌ Backend error:', e);
+            addLog('ERROR: Cannot connect to backend - check if server is running');
+        });
+
+    function addLog(msg) {
+        const log = document.getElementById('log');
+        const time = new Date().toLocaleTimeString();
+        log.innerHTML = `[${time}] ${msg}<br>` + log.innerHTML;
+    }
+
+    function updateConfidence() {
+        const slider = document.getElementById('confidenceSlider');
+        currentConfidence = parseFloat(slider.value);
+        document.getElementById('confidenceValue').textContent = currentConfidence.toFixed(2);
+        
+        if (processingComplete) {
+            addLog(`Confidence adjusted to ${currentConfidence.toFixed(2)} - reprocess video to apply`);
+        }
+    }
+
+    function updateCanvasSize() {
+        const vid = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        
+        // Get the actual displayed size of the video
+        const rect = vid.getBoundingClientRect();
+        
+        // Set canvas to match exactly
+        canvas.width = rect.width;
+        canvas.height = rect.height;
+        
+        console.log(`Canvas sized: ${canvas.width}x${canvas.height}, Video display: ${rect.width}x${rect.height}, Video native: ${vid.videoWidth}x${vid.videoHeight}`);
+    }
+
+    document.getElementById('fileInput').onchange = function(e) {
+        file = e.target.files[0];
+        if (file) {
+            addLog('Video loaded: ' + file.name);
+            const vid = document.getElementById('video');
+            vid.src = URL.createObjectURL(file);
+            document.getElementById('uploadBox').style.display = 'none';
+            document.getElementById('videoArea').classList.add('show');
+            
+            vid.onloadedmetadata = function() {
+                addLog(`Video ready: ${vid.videoWidth}x${vid.videoHeight}, ${vid.duration.toFixed(1)}s`);
+                
+                // Update canvas size after video loads
+                setTimeout(() => {
+                    updateCanvasSize();
+                }, 100);
+            };
+        }
+    };
+
+    // Update canvas size on window resize
+    window.addEventListener('resize', () => {
+        if (file) {
+            updateCanvasSize();
+            redrawCanvas();
+        }
+    });
+
+    function selectFile() {
+        document.getElementById('fileInput').click();
+    }
+
+    function playPause() {
+        const vid = document.getElementById('video');
+        if (playing) {
+            vid.pause();
+            playing = false;
+            document.getElementById('playBtn').textContent = '▶ Play';
+        } else {
+            vid.play();
+            playing = true;
+            document.getElementById('playBtn').textContent = '⏸ Pause';
+            drawResults();
+        }
+    }
+
+    function redrawCanvas() {
+        if (!playing) {
+            const vid = document.getElementById('video');
+            const canvas = document.getElementById('canvas');
+            const ctx = canvas.getContext('2d');
+            const currentTime = vid.currentTime;
+            
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            const fps = parseFloat(document.getElementById('fpsInput').value);
+            const frameNum = Math.floor(currentTime * fps);
+            const frame = frameData.find(f => f.frame === frameNum);
+            
+            if (frame) {
+                drawFrame(ctx, frame);
+            }
+        }
+    }
+
+    function drawFrame(ctx, frame) {
+        const showDots = document.getElementById('showDots').checked;
+        const showHeatmap = document.getElementById('showHeatmap').checked;
+        const showCount = document.getElementById('showCount').checked;
+
+        const vid = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        
+        console.log('=== DRAW FRAME DEBUG ===');
+        console.log('Frame data:', frame);
+        console.log('Has coordinates:', !!frame.coordinates);
+        console.log('Coordinate count:', frame.coordinates ? frame.coordinates.length : 0);
+        console.log('Canvas dimensions:', canvas.width, 'x', canvas.height);
+        console.log('Video dimensions:', vid.videoWidth, 'x', vid.videoHeight);
+        
+        if (!frame.coordinates || frame.coordinates.length === 0) {
+            console.warn('NO COORDINATES TO DRAW!');
+            // Still draw count if enabled
+            if (showCount) {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                ctx.fillRect(10, 10, 200, 55);
+                ctx.fillStyle = 'lime';
+                ctx.font = 'bold 24px Arial';
+                ctx.fillText('Count: ' + frame.count, 20, 45);
+            }
+            return;
+        }
+        
+        // Backend sends coordinates scaled to original video dimensions
+        // We need to scale to canvas display dimensions
+        const backendW = frame.backendOriginalSize ? frame.backendOriginalSize[0] : vid.videoWidth;
+        const backendH = frame.backendOriginalSize ? frame.backendOriginalSize[1] : vid.videoHeight;
+        
+        const scaleX = canvas.width / backendW;
+        const scaleY = canvas.height / backendH;
+
+        console.log('Backend size:', backendW, 'x', backendH);
+        console.log('Scale factors:', scaleX.toFixed(3), 'x', scaleY.toFixed(3));
+        console.log('First coordinate from backend:', frame.coordinates[0]);
+        console.log('First coordinate scaled:', 
+            frame.coordinates[0][0] * scaleX, 
+            frame.coordinates[0][1] * scaleY);
+
+        // Draw heatmap if enabled
+        if (showHeatmap && frame.coordinates && frame.coordinates.length > 0) {
+            console.log('Drawing heatmap with', frame.coordinates.length, 'points');
+            frame.coordinates.forEach(coord => {
+                const x = coord[0] * scaleX;
+                const y = coord[1] * scaleY;
+                const heatmapRadius = 30;
+                
+                const gradient = ctx.createRadialGradient(x, y, 0, x, y, heatmapRadius);
+                gradient.addColorStop(0, 'rgba(255, 0, 0, 0.5)');
+                gradient.addColorStop(0.5, 'rgba(255, 165, 0, 0.3)');
+                gradient.addColorStop(1, 'rgba(255, 255, 0, 0)');
+                
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(x, y, heatmapRadius, 0, 2 * Math.PI);
+                ctx.fill();
+            });
+        }
+
+        // Draw detection dots if enabled
+        if (showDots && frame.coordinates) {
+            console.log('Drawing dots:', frame.coordinates.length, 'total');
+            frame.coordinates.forEach((coord, idx) => {
+                const x = coord[0] * scaleX;
+                const y = coord[1] * scaleY;
+                
+                // Debug: log ALL coordinates for first frame
+                if (frame.frame === 0 || idx < 5) {
+                    console.log(`  Dot ${idx}: backend[${coord[0].toFixed(1)}, ${coord[1].toFixed(1)}] -> canvas[${x.toFixed(1)}, ${y.toFixed(1)}]`);
+                }
+                
+                // Draw a larger, more visible dot for testing
+                ctx.beginPath();
+                ctx.arc(x, y, 8, 0, 2 * Math.PI);
+                ctx.fillStyle = 'rgba(0, 255, 0, 0.9)';
+                ctx.fill();
+                ctx.strokeStyle = 'rgba(255, 0, 0, 1)';
+                ctx.lineWidth = 3;
+                ctx.stroke();
+                
+                // Also draw a small cross for visibility
+                ctx.strokeStyle = 'yellow';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(x - 10, y);
+                ctx.lineTo(x + 10, y);
+                ctx.moveTo(x, y - 10);
+                ctx.lineTo(x, y + 10);
+                ctx.stroke();
+            });
+            console.log('Finished drawing', frame.coordinates.length, 'dots');
+        } else {
+            console.log('Dots disabled or no coordinates');
+        }
+
+        // Draw count overlay if enabled
+        if (showCount) {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(10, 10, 200, 55);
+            ctx.fillStyle = 'lime';
+            ctx.font = 'bold 24px Arial';
+            ctx.fillText('Count: ' + frame.count, 20, 45);
+        }
+    }
+
+    function drawResults() {
+        if (!playing) return;
+        
+        const vid = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const currentTime = vid.currentTime;
+        
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        const fps = parseFloat(document.getElementById('fpsInput').value);
+        const frameNum = Math.floor(currentTime * fps);
+        const frame = frameData.find(f => f.frame === frameNum);
+        
+        if (frame) {
+            drawFrame(ctx, frame);
+        }
+        
+        requestAnimationFrame(drawResults);
+    }
+
+    async function processVideo() {
+        if (!file) {
+            alert('Please select a video first');
+            return;
+        }
+
+        addLog('Starting video processing...');
+        document.getElementById('processBtn').disabled = true;
+        document.getElementById('progress').classList.add('show');
+        
+        frameData = [];
+        processingComplete = false;
+        sessionId = 'session_' + Date.now();
+        
+        const vid = document.getElementById('video');
+        const duration = vid.duration;
+        const fps = parseFloat(document.getElementById('fpsInput').value);
+        const totalFrames = Math.floor(duration * fps);
+        
+        addLog(`Processing ${totalFrames} frames at ${fps} FPS with confidence ${currentConfidence.toFixed(2)}`);
+        
+        const wsUrl = API.replace('https://', 'wss://').replace('http://', 'ws://') + 
+                      '/ws/process-frames/' + sessionId;
+        
+        addLog('Connecting to processing server...');
+        ws = new WebSocket(wsUrl);
+        
+        ws.onopen = async function() {
+            addLog('✅ Connected to server, extracting frames...');
+            await extractAndSendFrames(totalFrames, fps);
+        };
+        
+        ws.onmessage = async function(e) {
+            const msg = JSON.parse(e.data);
+            
+            if (msg.type === 'result') {
+                console.log('=== RECEIVED FROM BACKEND ===');
+                console.log('Frame:', msg.frame);
+                console.log('Count:', msg.count);
+                console.log('Has coordinates:', !!msg.coordinates);
+                console.log('Coordinates length:', msg.coordinates ? msg.coordinates.length : 0);
+                console.log('Original size:', msg.original_size);
+                if (msg.coordinates && msg.coordinates.length > 0) {
+                    console.log('Sample coordinates:', msg.coordinates.slice(0, 3));
+                }
+                
+                // Store the original size info from backend
+                msg.backendOriginalSize = msg.original_size || [vid.videoWidth, vid.videoHeight];
+                frameData.push(msg);
+                
+                document.getElementById('progressText').textContent = msg.progress + '%';
+                document.getElementById('progressFill').style.width = msg.progress + '%';
+                
+                const counts = frameData.map(f => f.count);
+                const current = msg.count;
+                const max = Math.max(...counts);
+                const avg = Math.round(counts.reduce((a, b) => a + b, 0) / counts.length);
+                
+                document.getElementById('current').textContent = current;
+                document.getElementById('max').textContent = max;
+                document.getElementById('avg').textContent = avg;
+                
+                const thresh = parseInt(document.getElementById('threshold').value);
+                if (current > thresh) {
+                    showAlert(current, thresh);
+                }
+                
+                addLog(`Frame ${msg.frame}: ${msg.count} people detected`);
+            }
+            else if (msg.type === 'complete') {
+                addLog('✅ Processing complete!');
+                processingComplete = true;
+                document.getElementById('downloadBox').classList.add('show');
+                document.getElementById('processBtn').disabled = false;
+                
+                // Ensure canvas is properly sized before auto-playing
+                updateCanvasSize();
+                
+                if (!playing) {
+                    playPause();
+                }
+            }
+            else if (msg.type === 'error') {
+                addLog('ERROR: ' + msg.message);
+                alert('Processing error: ' + msg.message);
+                document.getElementById('processBtn').disabled = false;
+            }
+        };
+        
+        ws.onerror = function(e) {
+            addLog('WebSocket connection error');
+            console.error(e);
+            alert('Connection error. Please check if the backend server is running.');
+            document.getElementById('processBtn').disabled = false;
+        };
+        
+        ws.onclose = function() {
+            addLog('Server connection closed');
+        };
+    }
+
+    async function extractAndSendFrames(totalFrames, fps) {
+        const vid = document.getElementById('video');
+        const canvas = document.createElement('canvas');
+        canvas.width = vid.videoWidth;
+        canvas.height = vid.videoHeight;
+        const ctx = canvas.getContext('2d');
+        
+        const interval = 1 / fps;
+        
+        for (let i = 0; i < totalFrames; i++) {
+            const time = i * interval;
+            vid.currentTime = time;
+            
+            await new Promise(resolve => {
+                vid.onseeked = resolve;
+            });
+            
+            ctx.drawImage(vid, 0, 0);
+            const frameDataUrl = canvas.toDataURL('image/jpeg', 0.9);
+            
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    type: 'frame',
+                    frame_number: i,
+                    frame_data: frameDataUrl,
+                    total_frames: totalFrames,
+                    confidence: currentConfidence
+                }));
+            }
+            
+            await new Promise(r => setTimeout(r, 50));
+        }
+        
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'complete' }));
+            addLog('All frames sent to server');
+        }
+    }
+
+    function viewResults() {
+        if (processingComplete && frameData.length > 0) {
+            const vid = document.getElementById('video');
+            vid.currentTime = 0;
+            if (!playing) {
+                playPause();
+            }
+        }
+    }
+
+    function showAlert(count, thresh) {
+        const alert = document.getElementById('alert');
+        alert.classList.add('show');
+        document.getElementById('alertMsg').textContent = 
+            `Crowd count: ${count} people | Threshold: ${thresh} | Time: ${new Date().toLocaleTimeString()}`;
+    }
+
+    function hideAlert() {
+        document.getElementById('alert').classList.remove('show');
+    }
+
+    function reset() {
+        const vid = document.getElementById('video');
+        vid.pause();
+        vid.src = '';
+        
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.close();
+        }
+        ws = null;
+        
+        file = null;
+        frameData = [];
+        playing = false;
+        processingComplete = false;
+        
+        document.getElementById('uploadBox').style.display = 'block';
+        document.getElementById('videoArea').classList.remove('show');
+        document.getElementById('downloadBox').classList.remove('show');
+        document.getElementById('processBtn').disabled = false;
+        document.getElementById('progress').classList.remove('show');
+        
+        document.getElementById('current').textContent = '0';
+        document.getElementById('max').textContent = '0';
+        document.getElementById('avg').textContent = '0';
+        document.getElementById('progressFill').style.width = '0%';
+        document.getElementById('progressText').textContent = '0%';
+        document.getElementById('log').innerHTML = '';
+        document.getElementById('playBtn').textContent = '▶ Play';
+        
+        hideAlert();
+        addLog('System reset - ready for new analysis');
+    }
+    </script>
+</body>
+</html>
