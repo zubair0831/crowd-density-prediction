@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Crowd Intelligence System v3.1</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Epilogue:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="hdr">
+  <div class="hdr-badge">P2PNet · Optical Flow · Walkable Area · Distance Analysis · Multi-Signal Threshold</div>
+  <h1>Crowd <em>Intelligence</em> v3.1</h1>
+  <div class="hdr-sub">Walkable area estimation · Proximity violation detection · Dynamic zoning · Adaptive multi-signal thresholding</div>
+  <div id="backendChip" class="status-chip err">
+    <span class="chip-dot"></span>
+    <span id="backendTxt">Backend unreachable</span>
+  </div>
+</div>
+
+<!-- ══════════ ALERT BANNERS ══════════ -->
+<div id="alertBanner" class="alert-banner" role="alert">
+  <div class="al-icon">🚨</div>
+  <div class="al-body">
+    <h3 id="alertTitle">Density Threshold Exceeded</h3>
+    <p id="alertMsg"></p>
+    <p id="alertDetail" style="margin-top:3px;opacity:.75;font-size:11.5px;font-family:var(--mono)"></p>
+  </div>
+  <button class="al-ack" onclick="hideAlert('alertBanner')">Dismiss</button>
+</div>
+<div id="predictAlert" class="alert-banner warn" role="alert">
+  <div class="al-icon">📈</div>
+  <div class="al-body">
+    <h3>Predictive Warning: Density Rising</h3>
+    <p id="predictMsg"></p>
+  </div>
+  <button class="al-ack" style="background:rgba(251,191,36,.12);color:var(--amber);border-color:rgba(251,191,36,.3);" onclick="hideAlert('predictAlert')">Dismiss</button>
+</div>
+
+<div class="layout">
+
+  <!-- ══════════ MAIN PANEL (LEFT) ══════════ -->
+  <div>
+
+    <!-- Speech bar -->
+    <div class="speech-bar">
+      <span class="sb-label">🔊 Announcements</span>
+      <div class="speech-status" id="speechStatus">
+        <div class="speak-dot" id="speakDot"></div>
+        <span id="speechStatusText">System ready — automated warnings enabled</span>
+      </div>
+      <button class="speech-toggle" id="speechToggle" onclick="toggleSpeech()">Mute</button>
+    </div>
+
+    <!-- Announce log -->
+    <div class="announce-log">
+      <div class="al-hdr">📢 Announcement Log</div>
+      <div class="al-entries" id="announceLog">
+        <div style="color:var(--text3);font-size:11.5px;padding:4px 0;">No announcements yet…</div>
+      </div>
+    </div>
+
+    <!-- Upload zone -->
+    <div id="uploadBox" class="upload-zone panel" onclick="document.getElementById('fInput').click()">
+      <input type="file" id="fInput" accept="video/*" style="display:none">
+      <div class="upload-icon">📹</div>
+      <h2>Drop a video or click to browse</h2>
+      <p>AI crowd detection · Walkable area estimation · Distance analysis · Dynamic zoning</p>
+      <button class="btn-primary" onclick="event.stopPropagation();document.getElementById('fInput').click()">Choose File</button>
+    </div>
+
+    <!-- Video area -->
+    <div id="videoArea" class="panel video-area">
+      <div class="video-wrap" id="videoWrap">
+        <video id="video" preload="auto"></video>
+        <canvas id="overlay"></canvas>
+        <!-- Shown while video is hidden during frame capture / thumbnail generation -->
+        <div class="capture-overlay" id="captureOverlay">
+          <div class="capture-spinner"></div>
+          <div class="capture-overlay-text">Capturing frames…</div>
+        </div>
+
+        <!-- Calibration overlay -->
+        <div class="calib-overlay" id="calibOverlay">
+          <h3>📐 Venue Calibration</h3>
+          <p>Click 4 corners of a rectangle with known real-world dimensions</p>
+          <div class="calib-inputs">
+            <div>
+              <div style="font-size:11px;color:var(--text2);margin-bottom:4px;">Width (m)</div>
+              <input class="calib-num" type="number" id="calibW" placeholder="3.0" step="0.1">
+            </div>
+            <div>
+              <div style="font-size:11px;color:var(--text2);margin-bottom:4px;">Height (m)</div>
+              <input class="calib-num" type="number" id="calibH" placeholder="2.0" step="0.1">
+            </div>
+          </div>
+          <div style="font-family:var(--mono);font-size:12px;color:var(--text2);" id="calibDotCount">Click point 1 of 4…</div>
+          <button class="btn-sm" onclick="cancelCalib()">Cancel</button>
+        </div>
+      </div>
+
+      <!-- Player chrome -->
+      <div class="player-chrome">
+        <div class="tl-wrap" id="tlWrap">
+          <div class="thumb-pop" id="thumbPop">
+            <img class="thumb-img" id="thumbImg" src="" alt="">
+            <div class="thumb-ts" id="thumbTs">0:00</div>
+            <div class="thumb-arrow"></div>
+          </div>
+          <div class="tl-track" id="tlTrack">
+            <div class="tl-hover" id="tlHover" style="width:0%"></div>
+            <div class="tl-buf"    id="tlBuf"   style="width:0%"></div>
+            <div class="tl-played" id="tlPlayed" style="width:0%"></div>
+            <div class="tl-head"   id="tlHead"   style="left:0%"></div>
+          </div>
+        </div>
+        <div class="ctrl-bar">
+          <button class="cb" id="playBtn"  onclick="togglePlay()" title="Play/Pause">▶</button>
+          <button class="cb" onclick="skip(-10)" title="−10s">⏮</button>
+          <button class="cb" onclick="skip(+10)" title="+10s">⏭</button>
+          <span class="time-d"><b id="curTime">0:00</b> / <span id="durTime">0:00</span></span>
+          <div class="vol-w">
+            <button class="cb" id="muteBtn" onclick="toggleMute()">🔊</button>
+            <input class="vol-sl" type="range" id="volSl" min="0" max="1" step="0.02" value="1" oninput="setVol(this.value)">
+          </div>
+          <span class="sp"></span>
+          <button class="btn-primary" id="processBtn" onclick="processVideo()">⚡ Analyze</button>
+          <button class="btn-ghost" onclick="resetAll()">↺ Reset</button>
+        </div>
+      </div>
+
+      <!-- Processing progress -->
+      <div class="proc-wrap" id="procWrap">
+        <div class="proc-hdr">
+          <span>Analyzing frames</span>
+          <span id="pctTxt">0%</span>
+        </div>
+        <div class="proc-trk"><div class="proc-fil" id="pctFil"></div></div>
+        <div class="log" id="log"></div>
+      </div>
+    </div><!-- /videoArea -->
+
+  </div><!-- /main left column -->
+
+  <!-- ══════════ SIDEBAR (RIGHT) ══════════ -->
+  <div class="sidebar">
+    <div class="panel">
+
+      <!-- Tab navigation -->
+      <div class="stabs">
+        <button class="stab act" onclick="setTab('live')">Live</button>
+        <button class="stab"     onclick="setTab('distance')">Distance</button>
+        <button class="stab"     onclick="setTab('zones')">Zones</button>
+        <button class="stab"     onclick="setTab('history')">History</button>
+        <button class="stab"     onclick="setTab('settings')">Settings</button>
+      </div>
+
+      <!-- ══ LIVE TAB ══ -->
+      <div id="tab-live" class="tab-p act">
+
+        <!-- Behavior banner -->
+        <div class="beh-banner normal" id="behBanner">
+          <div class="beh-icon" id="behIcon">✅</div>
+          <div>
+            <div class="beh-state" id="behState">NORMAL</div>
+            <div class="beh-detail" id="behDetail">No anomalies detected</div>
+          </div>
+          <div class="beh-conf" id="behConf">—</div>
+        </div>
+
+        <div class="sec-lbl">Live Statistics</div>
+        <div class="stat-g">
+          <div class="sc full">
+            <div class="sc-lbl">Current Count</div>
+            <div class="sc-val c-c" id="sCurrent">0</div>
+          </div>
+          <div class="sc">
+            <div class="sc-lbl">Peak Count</div>
+            <div class="sc-val c-p" id="sMax">0</div>
+          </div>
+          <div class="sc">
+            <div class="sc-lbl">Average</div>
+            <div class="sc-val c-g" id="sAvg">0</div>
+          </div>
+        </div>
+
+        <!-- Fruin LOS row -->
+        <div id="losRow" class="los-row" style="display:none">
+          <div class="los-badge" id="losBadge">A</div>
+          <div class="los-info">
+            <div class="los-label" id="losLabel">Free Flow</div>
+            <div class="los-desc"  id="losDesc">No crowd safety concern</div>
+          </div>
+          <div class="los-density" id="losDensity"></div>
+        </div>
+
+        <!-- Multi-signal adaptive threshold card -->
+        <div class="tc">
+          <div class="tc-top">
+            <div>
+              <div class="sec-lbl">Adaptive Threshold v2</div>
+              <div class="tc-val" id="tcV">—</div>
+            </div>
+            <div id="tcBadge" class="tc-badge b-wu">Warm-up</div>
+          </div>
+          <div class="tc-sub" id="tcSub">Accumulating baseline…</div>
+          <div class="bar-trk"><div class="bar-fil" id="barFil" style="width:0%"></div></div>
+          <div class="bar-meta"><span>0</span><span id="barLbl">—</span></div>
+
+          <!-- Signal stack -->
+          <div class="signals-stack" id="signalStack" style="display:none;">
+            <div style="font-family:var(--mono);font-size:9px;color:var(--text3);letter-spacing:1px;text-transform:uppercase;margin-top:8px;margin-bottom:2px;">Signal Contributions</div>
+            <div class="signal-row">
+              <span class="sig-lbl">Baseline</span>
+              <div class="sig-bar-wrap"><div class="sig-bar-inner" id="sig-baseline" style="background:var(--cyan);width:0%"></div></div>
+              <span class="sig-val" id="sigv-baseline">—</span>
+            </div>
+            <div class="signal-row">
+              <span class="sig-lbl">Area Cap</span>
+              <div class="sig-bar-wrap"><div class="sig-bar-inner" id="sig-area" style="background:var(--teal);width:0%"></div></div>
+              <span class="sig-val" id="sigv-area">—</span>
+            </div>
+            <div class="signal-row">
+              <span class="sig-lbl">Proximity</span>
+              <div class="sig-bar-wrap"><div class="sig-bar-inner" id="sig-prox" style="background:var(--amber);width:0%"></div></div>
+              <span class="sig-val" id="sigv-prox">—</span>
+            </div>
+            <div class="signal-row">
+              <span class="sig-lbl">Zone CV</span>
+              <div class="sig-bar-wrap"><div class="sig-bar-inner" id="sig-zone" style="background:var(--purple);width:0%"></div></div>
+              <span class="sig-val" id="sigv-zone">—</span>
+            </div>
+            <div class="signal-row">
+              <span class="sig-lbl">Final T</span>
+              <div class="sig-bar-wrap"><div class="sig-bar-inner" id="sig-final" style="background:var(--pink);width:0%"></div></div>
+              <span class="sig-val" id="sigv-final">—</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Capacity & walkable info -->
+        <div class="cap-card">
+          <div class="sec-lbl">Capacity Utilization</div>
+          <div style="display:flex;align-items:baseline;gap:6px;">
+            <div style="font-family:var(--head);font-size:38px;font-weight:900;letter-spacing:-2px;" id="capPct">—%</div>
+            <div style="font-size:12px;color:var(--text2);" id="capLabel">of threshold</div>
+          </div>
+          <div id="walkableInfo" style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-top:4px;">Walkable area: awaiting data</div>
+        </div>
+
+        <div class="rpt-row">
+          <button class="btn-sm" onclick="downloadReport()">📄 Report</button>
+          <button class="btn-sm" onclick="enterCalibMode()">📐 Calibrate</button>
+          <button class="btn-sm" onclick="testAnnouncement()">🔊 Test Voice</button>
+        </div>
+      </div><!-- /tab-live -->
+
+      <!-- ══ DISTANCE TAB ══ -->
+      <div id="tab-distance" class="tab-p">
+        <div class="sec-lbl">Proximity Analysis</div>
+
+        <div class="prox-banner safe" id="proxBanner">
+          <div class="prox-icon" id="proxIcon">✅</div>
+          <div>
+            <div class="prox-label" id="proxLabel" style="color:var(--green)">SAFE SPACING</div>
+            <div class="prox-detail" id="proxDetail">All persons within safe distance</div>
+          </div>
+          <div class="prox-score" id="proxScore" style="color:var(--green)">0%</div>
+        </div>
+
+        <div class="dist-stats">
+          <div class="ds-item"><div class="ds-lbl">Violations</div><div class="ds-val c-r" id="dViolations">0</div></div>
+          <div class="ds-item"><div class="ds-lbl">Violation %</div><div class="ds-val c-a" id="dVioRatio">0%</div></div>
+          <div class="ds-item"><div class="ds-lbl">Median NN</div><div class="ds-val c-c" id="dMedianNN">—</div></div>
+          <div class="ds-item"><div class="ds-lbl">Safe Dist</div><div class="ds-val c-g" id="dSafeDist">—</div></div>
+        </div>
+
+        <!-- NN distance histogram -->
+        <div class="nn-hist-wrap">
+          <div class="nn-hist-title">NN Distance Distribution</div>
+          <canvas class="nn-hist-canvas" id="nnHistCanvas" height="80"></canvas>
+        </div>
+
+        <!-- Walkable area card -->
+        <div class="walkable-card">
+          <div class="walkable-title">Walkable Area Estimation</div>
+
+          <!-- Tier badge -->
+          <div id="tierBadge" class="tier-badge tier-heuristic">◇ Heuristic fallback</div>
+
+          <div class="walkable-bar-row">
+            <span class="walkable-bar-label">Walkable</span>
+            <div class="wb-track"><div class="wb-fill" id="walkableBar" style="width:0%"></div></div>
+            <span class="wb-val" id="walkablePct">—%</span>
+          </div>
+          <div class="walkable-bar-row">
+            <span class="walkable-bar-label">Obstacles</span>
+            <div class="wb-track"><div class="wb-fill" id="obstacleBar" style="width:0%;background:linear-gradient(90deg,var(--orange),var(--red))"></div></div>
+            <span class="wb-val" id="obstaclePct">—%</span>
+          </div>
+
+          <!-- SegFormer semantic class breakdown -->
+          <div style="font-family:var(--mono);font-size:10px;color:var(--text3);margin:8px 0 4px;letter-spacing:1px;text-transform:uppercase;">Semantic Classes</div>
+          <div class="seg-class-list" id="segClassList">
+            <div style="color:var(--text3);font-size:11px;">SegFormer not active — no semantic data</div>
+          </div>
+
+          <div style="font-family:var(--mono);font-size:10px;color:var(--text3);margin:8px 0 4px;letter-spacing:1px;text-transform:uppercase;">Detected Obstacles</div>
+          <div class="obstacle-list" id="obstacleList">
+            <div style="color:var(--text3);font-size:11px;">No obstacles detected yet</div>
+          </div>
+        </div>
+
+        <!-- Walkable mask grid -->
+        <div style="background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:12px;">
+          <div class="sec-lbl">Walkable Mask Grid</div>
+          <canvas id="walkableMaskCanvas" style="width:100%;display:block;border-radius:4px;image-rendering:pixelated;" height="60"></canvas>
+          <div style="display:flex;justify-content:space-between;font-family:var(--mono);font-size:9px;color:var(--text3);margin-top:4px;">
+            <span>Non-walkable</span><span>Walkable</span>
+          </div>
+        </div>
+      </div><!-- /tab-distance -->
+
+      <!-- ══ ZONES TAB ══ -->
+      <div id="tab-zones" class="tab-p">
+        <div class="sec-lbl">Dynamic Zone Map <span style="font-weight:400;color:var(--text3)">(8×6 walkable-aware)</span></div>
+
+        <div class="zone-stats-grid">
+          <div class="zsg-item"><div class="zsg-lbl">Hot Zones</div><div class="zsg-val c-r" id="zHot">0</div></div>
+          <div class="zsg-item"><div class="zsg-lbl">Max Zone Count</div><div class="zsg-val c-a" id="zPeak">0</div></div>
+          <div class="zsg-item"><div class="zsg-lbl">Crush Risk</div><div class="zsg-val c-r" id="zCrush">0</div></div>
+          <div class="zsg-item"><div class="zsg-lbl">Walkable Zones</div><div class="zsg-val c-t" id="zWalkable">—</div></div>
+        </div>
+
+        <div class="zone-map-controls">
+          <button class="zmc-btn act" onclick="setZoneMode('risk',this)">Risk</button>
+          <button class="zmc-btn"     onclick="setZoneMode('density',this)">Density</button>
+          <button class="zmc-btn"     onclick="setZoneMode('walkable',this)">Walkable</button>
+          <button class="zmc-btn"     onclick="setZoneMode('flow',this)">Flow</button>
+        </div>
+
+        <div class="zone-map-wrap">
+          <canvas class="zone-map-canvas" id="zoneMapCanvas"
+                  onmousemove="zoneHover(event)"
+                  onmouseleave="clearZoneHover()"
+                  onclick="zoneClick(event)"></canvas>
+          <div class="zone-legend-row">
+            <span style="color:var(--green)">Low</span>
+            <div class="legend-bar"></div>
+            <span style="color:var(--red)">Critical</span>
+          </div>
+        </div>
+
+        <div class="zone-detail" id="zoneDetail">
+          <div class="zd-title">ZONE DETAIL — hover or click a cell</div>
+          <div style="color:var(--text2);font-size:12.5px;line-height:1.6;">
+            Zones clipped to walkable area. Non-walkable cells shown with hatching. Density is calculated using real walkable area in each cell.
+          </div>
+        </div>
+
+        <div class="divider"></div>
+        <div class="sec-lbl">Fruin Level of Service</div>
+        <table class="fruin-table">
+          <thead>
+            <tr><th>LOS</th><th>p/m²</th><th>Condition</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><span class="ft-dot" style="background:#4ade80"></span> A</td><td>≤ 0.5</td><td>Free movement</td></tr>
+            <tr><td><span class="ft-dot" style="background:#86efac"></span> B</td><td>≤ 1.0</td><td>Restricted</td></tr>
+            <tr><td><span class="ft-dot" style="background:#fde68a"></span> C</td><td>≤ 1.7</td><td>Acceptable</td></tr>
+            <tr><td><span class="ft-dot" style="background:#fbbf24"></span> D</td><td>≤ 2.7</td><td>Uncomfortable</td></tr>
+            <tr><td><span class="ft-dot" style="background:#f97316"></span> E</td><td>≤ 4.0</td><td>Very restricted</td></tr>
+            <tr><td><span class="ft-dot" style="background:#f87171"></span> F</td><td>&gt; 4.0</td><td style="color:var(--red);font-weight:700">Crush risk</td></tr>
+          </tbody>
+        </table>
+      </div><!-- /tab-zones -->
+
+      <!-- ══ HISTORY TAB ══ -->
+      <div id="tab-history" class="tab-p">
+        <div class="hist-controls">
+          <button class="hc-pill act" onclick="setTimeRange('all',this)">All</button>
+          <button class="hc-pill"     onclick="setTimeRange('60',this)">60s</button>
+          <button class="hc-pill"     onclick="setTimeRange('30',this)">30s</button>
+          <button class="hc-pill"     onclick="setTimeRange('10',this)">10s</button>
+          <select class="zone-filter" id="zoneFilter" onchange="updateHistoryView()">
+            <option value="all">All Zones</option>
+          </select>
+        </div>
+
+        <div class="hist-summary-cards">
+          <div class="hsc"><div class="hsc-lbl">Peak</div><div class="hsc-val c-p" id="hsPeak">—</div></div>
+          <div class="hsc"><div class="hsc-lbl">Average</div><div class="hsc-val c-g" id="hsAvg">—</div></div>
+          <div class="hsc"><div class="hsc-lbl">Breaches</div><div class="hsc-val c-r" id="hsBreaches">—</div></div>
+          <div class="hsc"><div class="hsc-lbl">Duration</div><div class="hsc-val c-c" id="hsDur">—</div></div>
+        </div>
+
+        <div class="hist-chart-wrap">
+          <div class="hcw-header">
+            <div class="hcw-title">Count + Threshold Timeline</div>
+            <div class="hcw-legend">
+              <div class="legend-item"><div class="li-dot" style="background:var(--cyan)"></div>Count</div>
+              <div class="legend-item"><div class="li-dot" style="background:var(--amber)"></div>Threshold</div>
+              <div class="legend-item"><div class="li-dot" style="background:var(--teal)"></div>Area Cap</div>
+              <div class="legend-item"><div class="li-dot" style="background:var(--red)"></div>Breach</div>
+            </div>
+          </div>
+          <canvas class="hist-chart-canvas" id="histChartCanvas" height="160"></canvas>
+        </div>
+
+        <div class="sec-lbl">Notable Events</div>
+        <div class="events-list" id="eventsList">
+          <div class="hist-empty">No events recorded yet</div>
+        </div>
+
+        <div style="margin-top:12px;display:flex;gap:8px;">
+          <button class="btn-sm" onclick="exportCSV()">⬇ Export CSV</button>
+        </div>
+      </div><!-- /tab-history -->
+
+      <!-- ══ SETTINGS TAB ══ -->
+      <div id="tab-settings" class="tab-p">
+
+        <div class="sett">
+          <label>Detection Confidence</label>
+          <input type="range" id="confSl" min="0.1" max="0.9" step="0.05" value="0.5" oninput="updConf(this.value)">
+          <div class="rv" id="confV">0.50</div>
+        </div>
+
+        <div class="sett">
+          <label>Z-Score Multiplier</label>
+          <input type="range" id="zSl" min="0.5" max="4.0" step="0.25" value="2.0" oninput="updZ(this.value)">
+          <div class="rv" id="zV">2.00σ</div>
+          <small style="color:var(--text2);font-size:11px;margin-top:3px;display:block">Lower = triggers earlier</small>
+        </div>
+
+        <div class="sett">
+          <label>Smoothing Window (frames)</label>
+          <input type="range" id="smSl" min="3" max="15" step="1" value="7" oninput="updSmooth(this.value)">
+          <div class="rv" id="smV">7</div>
+        </div>
+
+        <div class="sett">
+          <label>Processing FPS (1–10)</label>
+          <input type="number" id="fpsIn" value="2" min="1" max="10">
+        </div>
+
+        <div class="sett">
+          <label>Session / Venue Name</label>
+          <input type="text" id="venueName" placeholder="e.g. Main Hall — Day 1">
+        </div>
+
+        <!-- Announcement thresholds -->
+        <div class="sett" style="background:var(--s2);border:1px solid var(--border);border-radius:9px;padding:13px;">
+          <label style="margin-bottom:12px !important;">Announcement Thresholds</label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div>
+              <div style="font-size:11px;color:var(--amber);margin-bottom:4px;">⚠ Moderate (%)</div>
+              <input type="number" id="threshMod" value="60" min="10" max="100" style="font-size:13px;">
+            </div>
+            <div>
+              <div style="font-size:11px;color:var(--orange);margin-bottom:4px;">🔶 High (%)</div>
+              <input type="number" id="threshHigh" value="80" min="10" max="100" style="font-size:13px;">
+            </div>
+            <div>
+              <div style="font-size:11px;color:var(--red);margin-bottom:4px;">🔴 Critical (%)</div>
+              <input type="number" id="threshCrit" value="100" min="10" max="100" style="font-size:13px;">
+            </div>
+            <div>
+              <div style="font-size:11px;color:var(--blue);margin-bottom:4px;">📈 Predict (%/f)</div>
+              <input type="number" id="threshPred" value="3" min="1" max="20" style="font-size:13px;">
+            </div>
+          </div>
+        </div>
+
+        <!-- Visualization layer toggles -->
+        <div class="sett">
+          <label>Visualization Layers</label>
+          <div class="checks">
+            <div class="chk"><input type="checkbox" id="showDots"     checked><label for="showDots">Detection markers</label></div>
+            <div class="chk"><input type="checkbox" id="showHeat"           ><label for="showHeat">Density heatmap</label></div>
+            <div class="chk"><input type="checkbox" id="showZones"   checked><label for="showZones">Zone risk overlay</label></div>
+            <div class="chk"><input type="checkbox" id="showWalkable" checked><label for="showWalkable">Walkable area hatching</label></div>
+            <div class="chk"><input type="checkbox" id="showObstacles" checked><label for="showObstacles">Obstacle boxes + labels</label></div>
+            <div class="chk"><input type="checkbox" id="showFlow"    checked><label for="showFlow">Flow vectors</label></div>
+            <div class="chk"><input type="checkbox" id="showProx"    checked><label for="showProx">Proximity violations</label></div>
+            <div class="chk"><input type="checkbox" id="showPres"          ><label for="showPres">Pressure field</label></div>
+            <div class="chk"><input type="checkbox" id="showCount"   checked><label for="showCount">Count overlay</label></div>
+            <div class="chk"><input type="checkbox" id="showThresh"  checked><label for="showThresh">Threshold badge</label></div>
+            <div class="chk"><input type="checkbox" id="showBehav"   checked><label for="showBehav">Behavior label</label></div>
+          </div>
+        </div>
+
+        <!-- Venue calibration -->
+        <div class="calib-section">
+          <div class="calib-title">Venue Calibration</div>
+          <div class="calib-fields">
+            <div class="calib-field">
+              <label>Width (m)</label>
+              <input type="number" id="calibW2" placeholder="3.0" step="0.1">
+            </div>
+            <div class="calib-field">
+              <label>Height (m)</label>
+              <input type="number" id="calibH2" placeholder="2.0" step="0.1">
+            </div>
+          </div>
+          <button class="btn-sm" onclick="enterCalibMode()">📐 Start Calibration</button>
+          <div class="calib-status" id="calibStatus">Not calibrated — density shown as relative</div>
+        </div>
+
+      </div><!-- /tab-settings -->
+
+    </div><!-- /panel -->
+  </div><!-- /sidebar -->
+
+</div><!-- /layout -->
+
+<!-- ══════════ SCRIPTS ══════════ -->
+<!-- Load order matters: app.js uses functions defined in the other files,
+    but panels.js, overlay.js, speech.js are all self-contained and referenced
+    by app.js event handlers and processVideo(). -->
+<script src="js/speech.js"></script>
+<script src="js/overlay.js"></script>
+<script src="js/panels.js"></script>
+<script src="js/app.js"></script>
+
+</body>
+</html>
