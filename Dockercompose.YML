@@ -1,0 +1,92 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# docker-compose.yml — Crowd Intelligence System  v3.2
+#
+# Services
+#   backend   FastAPI + PyTorch (GPU passthrough via NVIDIA runtime)
+#   frontend  nginx serving static JS/CSS/HTML + reverse proxy
+#
+# Run from inside the SDP/ folder:
+#   GPU:      docker compose up --build
+#   CPU-only: docker compose up --build  (after editing Dockerfile ARG BASE)
+#
+# First run downloads SegFormer (~400 MB) into hf_cache volume — cached on
+# subsequent starts.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+services:
+
+  # ── FastAPI backend ─────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: .          # SDP/ is the build context
+      dockerfile: Dockerfile
+    image: crowd-backend:latest
+    container_name: crowd_backend
+    restart: unless-stopped
+
+    # GPU passthrough — delete this entire `deploy` block for CPU-only mode
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+    environment:
+      - PYTHONUNBUFFERED=1
+      - HF_HOME=/app/.cache/huggingface
+      - TRANSFORMERS_CACHE=/app/.cache/huggingface/transformers
+      - CUDA_VISIBLE_DEVICES=0   # use first GPU; set to "" to force CPU
+
+    volumes:
+      # sessions.db lives at /app/sessions.db because database.py uses the
+      # relative path "sessions.db" and WORKDIR is /app.
+      # Bind-mounting the host file gives you persistence without changing code.
+      - ./sessions.db:/app/sessions.db
+
+      # SegFormer weights (~400 MB) — downloaded once, reused across restarts
+      - hf_cache:/app/.cache/huggingface
+
+    # Only nginx talks to the backend — not exposed to the host
+    expose:
+      - "8000"
+
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s   # models (SegFormer + YOLO + P2PNet) need time to load
+
+  # ── nginx frontend ──────────────────────────────────────────────────────────
+  frontend:
+    image: nginx:1.27-alpine
+    container_name: crowd_frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+
+    ports:
+      - "80:80"           # open http://localhost in your browser
+
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      # Frontend entry point
+      - ./index.html:/usr/share/nginx/html/index.html:ro
+      # js/ and css/ are directories — mounted as directories
+      - ./js:/usr/share/nginx/html/js:ro
+      - ./css:/usr/share/nginx/html/css:ro
+
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+# ── Named volumes ──────────────────────────────────────────────────────────────
+volumes:
+  hf_cache:
+    driver: local

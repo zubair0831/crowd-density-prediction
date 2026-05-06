@@ -1,0 +1,36 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# AI Crowd Intelligence System  v3.2 — Python dependencies
+# Install: pip install -r requirements.txt
+#
+# GPU (recommended):
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+# CPU-only:
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ── Web framework ─────────────────────────────────────────────────────────────
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+
+# ── Deep learning core ────────────────────────────────────────────────────────
+# Install torch separately (see header note for GPU vs CPU wheels)
+torch>=2.2.0
+torchvision>=0.17.0
+
+# ── Computer vision ───────────────────────────────────────────────────────────
+opencv-python>=4.9.0.80
+Pillow>=10.3.0
+ultralytics>=8.2.0          # YOLOv8n (yolov8n.pt)
+
+# ── Semantic segmentation ─────────────────────────────────────────────────────
+transformers>=4.40.0        # SegFormer-B2 / B0 (ADE20K)
+accelerate>=0.30.0          # optional but speeds up HF model loading
+
+# ── Numerical / spatial ───────────────────────────────────────────────────────
+numpy>=1.26.0
+scipy>=1.13.0               # KDTree (DistanceAnalyzer), linear_sum_assignment (TrajectoryTracker)
+
+# ── P2PNet crowd-counting (local package — no PyPI entry) ─────────────────────
+# Assumes the repo is cloned into ./CrowdCounting-P2PNet/
+# git clone https://github.com/TencentYoutuResearch/CrowdCounting-P2PNet
+# Weights: ./CrowdCounting-P2PNet/weights/SHTechA.pth
